@@ -45,6 +45,22 @@ check that the tests catch them:
 - openfootball's `et` score is cumulative (it includes regulation goals). The shootout lives
   only in period 5 of the StatsBomb events.
 
+## The model
+
+`make model` rebuilds 29 typed, constrained tables from raw in one transaction, in about 17 seconds.
+The 40 tests also check the model against the outside world and the rules of the game:
+
+- Model-derived goals equal all 64 published scores.
+- Top scorers equal FIFA's Golden Boot (Mbappé 8, Messi 7, Álvarez 4, Giroud 4).
+- All 8 derived group tables, with tie-breaks, equal the published final standings.
+- Each team has 11 players on the pitch, minus dismissals, throughout every period.
+  Time on the pitch comes from the event stream, because StatsBomb's lineup positions
+  contain 95 phantom spells across 30 matches.
+
+Building the model surfaced more upstream problems, such as Morocco having no group
+label and phantom lineup spells. Each is handled and pinned by
+a test. Design decisions and the full list are in [docs/model.md](docs/model.md).
+
 ## Layout
 
 ```
@@ -53,6 +69,7 @@ data/checksums.sha256     sha256 of every raw file (data/raw is git-ignored)
 docker/postgres/          Postgres 16 + pgTAP + pg_prove image
 sql/raw/                  raw layer (one row per file, jsonb)
 sql/audit/                reconciliation views over raw
+sql/stg/, sql/model/      staging (jsonb per record) and the canonical typed model
 tests/pgtap/              pgTAP tests, run by `make test` and CI
 site/                     local status page (later: the browser SQL playground)
 ```
@@ -62,8 +79,8 @@ site/                     local status page (later: the browser SQL playground)
 | Phase | Status |
 |---|---|
 | Foundation: raw ingest + reconciliation | Done |
-| Canonical model: competition, season, team, player, match, lineup, event, shot, pass…, with the grain documented per table | Next |
-| 10–15 analyst queries (group tables, xG vs goals, pass networks, pressures per 90) with `EXPLAIN ANALYZE` evidence | Planned |
+| Canonical model: 29 typed tables with the grain stated per table; see [docs/model.md](docs/model.md) | Done |
+| 10–15 analyst queries (group tables, xG vs goals, pass networks, pressures per 90) with `EXPLAIN ANALYZE` evidence | Next |
 | Browser SQL playground (DuckDB-WASM or PGlite) with auto-checked challenges, on GitHub Pages | Planned |
 
 ## Credits

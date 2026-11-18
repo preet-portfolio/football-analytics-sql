@@ -18,6 +18,7 @@ with this project's own model.
 | `make up` | Build and start Postgres 16 + pgTAP (`docker compose`, host port 5433) |
 | `make fetch` | Download pinned sources to `data/raw/`; verify `data/checksums.sha256` |
 | `make load` | Apply `sql/raw/*.sql`, `sql/audit/*.sql`; load every raw file |
+| `make model` | Rebuild `stg` + `model` from raw in one transaction (~16 s) |
 | `make test` | `pg_prove` over `tests/pgtap/`; writes `site/data/tests.tap` |
 | `make report` | Writes `site/data/status.json` for the status page |
 | `make serve` | Status page at http://localhost:8000 (auto-refreshes every 5 s) |
@@ -33,9 +34,11 @@ No host `psql`; always go through `docker compose exec db ...`.
 2. **audit** (`sql/audit/`) — reconciliation views that read raw directly.
    `audit.score_reconciliation` compares three witnesses per match: event-derived goals,
    StatsBomb `matches.json` score, openfootball score (plus shootouts).
-3. **model** (next phase, not built yet) — canonical schema: competition, season, team,
-   player, match, lineup, event, plus subtype tables (shot, pass, ...).
-4. **marts / analysis**, then the **playground** (DuckDB-WASM or PGlite in `site/`).
+3. **stg** (`sql/stg/`) — one jsonb row per record (event, lineup player, match), plus
+   `stg.quarantine` for impossible upstream records (kept with a reason, pinned by a test).
+4. **model** (`sql/model/`) — typed, constrained tables; event supertype + subtype tables.
+   Design decisions and known upstream problems: `docs/model.md`.
+5. **marts / analysis**, then the **playground** (DuckDB-WASM or PGlite in `site/`).
 
 Pinned sources live in `config/sources.env`. Changing a commit changes the data.
 
@@ -51,6 +54,10 @@ Pinned sources live in `config/sources.env`. Changing a commit changes the data.
   cumulative and already includes regulation goals; openfootball says `USA` where
   StatsBomb says `United States`; Croatia v Morocco is played twice, so join matches
   on date plus team pair.
+- Never fix an upstream problem silently: handle it in SQL, document it in `docs/model.md`
+  and the status page, and pin it with a test so a *new* problem fails the build.
+- Project agents in `.claude/agents/` load only when the session starts inside this repo;
+  from elsewhere, use `general-purpose` with the agent's brief (and `model: haiku` for the profiler).
 - SQL style: lowercase identifiers, uppercase keywords, CTEs over nested subqueries,
   explicit `CROSS JOIN LATERAL jsonb_array_elements(...)` for JSON arrays.
 - Attribution: anything published must credit StatsBomb as the data source (and use

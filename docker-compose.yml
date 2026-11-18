@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: football
       POSTGRES_DB: football
     ports:
-      - "5433:5432"   # connect a GUI client to localhost:5433
+      - "127.0.0.1:5433:5432"   # loopback only: the role is a superuser with a dev password
     volumes:
       - ./data/raw:/data/raw:ro   # raw files are read server-side by raw.load_file()
       - ./sql:/sql:ro
