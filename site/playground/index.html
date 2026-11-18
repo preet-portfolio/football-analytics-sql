@@ -102,6 +102,9 @@
   .result th { position: sticky; top: 0; background: var(--sheet); font-weight: 600; box-shadow: 0 1px 0 var(--rule); }
   .result td.n { text-align: right; font-variant-numeric: tabular-nums; }
   .result td.null { color: var(--muted); font-style: italic; }
+  .data-credit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+  .sb-logo { display: inline-block; background: #ffffff; padding: 8px 12px; border-radius: 4px; line-height: 0; border: 1px solid var(--rule); }
+  .sb-logo img { display: block; width: 180px; height: auto; }
   footer { max-width: 1280px; margin: 32px auto 0; padding: 0 16px 48px; color: var(--muted); font-size: .88rem; }
   footer p { max-width: 80ch; }
 </style>
@@ -149,6 +152,7 @@
 </div>
 
 <footer>
+  <p class="data-credit">Data provided by <a href="https://statsbomb.com" class="sb-logo"><img src="../assets/statsbomb-logo.png" alt="StatsBomb" width="180" height="29"></a></p>
   <p>Queries run as a read-only role inside a transaction that is always rolled back; a script that tries to commit is stopped and a clean copy of the database is loaded. The database is the same one the project's pgTAP suite checks: a test compares every table and view here with the tested PostgreSQL, row by row. Data: <a href="https://github.com/statsbomb/open-data">StatsBomb Open Data</a>. Challenges are inspired by the topics of <cite>Learn SQL Through Football</cite> (Apress); no material from the book is reused.</p>
 </footer>
 

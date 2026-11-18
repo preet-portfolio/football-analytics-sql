@@ -102,6 +102,9 @@
   .speedup { font-weight: 600; color: var(--pitch); }
   .speedup.flat { color: var(--muted); font-weight: 500; }
   .empty { background: var(--sheet); border: 1px dashed var(--rule); padding: 20px; }
+  .data-credit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+  .sb-logo { display: inline-block; background: #ffffff; padding: 8px 12px; border-radius: 4px; line-height: 0; border: 1px solid var(--rule); }
+  .sb-logo img { display: block; width: 180px; height: auto; }
   footer { margin-top: 64px; color: var(--muted); font-size: .9rem; max-width: 70ch; }
   :focus-visible { outline: 3px solid var(--pitch); outline-offset: 2px; }
 </style>
@@ -144,6 +147,7 @@
   <div id="tests"><p class="empty">Tests have not run yet.</p></div>
 
   <footer>
+    <p class="data-credit">Data provided by <a href="https://statsbomb.com" class="sb-logo"><img src="assets/statsbomb-logo.png" alt="StatsBomb" width="180" height="29"></a></p>
     <p>Data: <a href="https://github.com/statsbomb/open-data">StatsBomb Open Data</a> and <a href="https://github.com/openfootball/worldcup.json">openfootball</a>. Concepts inspired by <em>Learn SQL Through Football</em> by Hamed Tabrizchi (Apress, 2026); no code from the book is reused.</p>
     <p id="stamp"></p>
   </footer>

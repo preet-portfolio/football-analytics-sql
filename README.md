@@ -144,7 +144,10 @@ site/                     status page (index.html) and the SQL playground (playg
 ## Credits
 
 - **Data:** [StatsBomb Open Data](https://github.com/statsbomb/open-data). Per StatsBomb's
-  terms, published work must credit StatsBomb as the data source and use its logo.
+  terms, published work credits StatsBomb as the data source and shows its logo
+  (`site/assets/statsbomb-logo.png`, from StatsBomb's open-data repository).
+
+  [<img src="site/assets/statsbomb-logo.png" alt="StatsBomb" width="220">](https://statsbomb.com)
 - **Results:** [openfootball/worldcup.json](https://github.com/openfootball/worldcup.json)
   (public domain).
 - **Inspiration:** the concepts follow *Learn SQL Through Football* by Hamed Tabrizchi
