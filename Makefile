@@ -1,12 +1,12 @@
 .DEFAULT_GOAL := all
-.PHONY: all up fetch load model test report serve psql lock down clean
+.PHONY: all up fetch load model analysis bench test report serve psql lock down clean
 
 SHELL   := /bin/bash
 COMPOSE := docker compose
 PORT    ?= 8000
 
 ## all: rebuild everything from the pinned raw files and run every test
-all: fetch up load model report test
+all: fetch up load model analysis report test
 
 ## up: build the Postgres 16 + pgTAP image and start it
 up:
@@ -24,6 +24,14 @@ load:
 ## model: rebuild stg + model schemas from raw (one transaction)
 model:
 	./scripts/model.sh
+
+## analysis: (re)create the analysis views
+analysis:
+	./scripts/analysis.sh
+
+## bench: EXPLAIN ANALYZE evidence for indexes -> docs/perf/README.md, site/data/perf.json
+bench:
+	python3 scripts/bench.py
 
 ## test: run the pgTAP suite; TAP output is also saved for the status page
 test:

@@ -19,6 +19,8 @@ with this project's own model.
 | `make fetch` | Download pinned sources to `data/raw/`; verify `data/checksums.sha256` |
 | `make load` | Apply `sql/raw/*.sql`, `sql/audit/*.sql`; load every raw file |
 | `make model` | Rebuild `stg` + `model` from raw in one transaction (~16 s) |
+| `make analysis` | (Re)create the `analysis` views (analyst questions) |
+| `make bench` | `EXPLAIN ANALYZE` before/after for every index and rewrite → `docs/perf/README.md` |
 | `make test` | `pg_prove` over `tests/pgtap/`; writes `site/data/tests.tap` |
 | `make report` | Writes `site/data/status.json` for the status page |
 | `make serve` | Status page at http://localhost:8000 (auto-refreshes every 5 s) |
@@ -38,7 +40,8 @@ No host `psql`; always go through `docker compose exec db ...`.
    `stg.quarantine` for impossible upstream records (kept with a reason, pinned by a test).
 4. **model** (`sql/model/`) — typed, constrained tables; event supertype + subtype tables.
    Design decisions and known upstream problems: `docs/model.md`.
-5. **marts / analysis**, then the **playground** (DuckDB-WASM or PGlite in `site/`).
+5. **analysis** (`sql/analysis/`) — one view per analyst question; each view's COMMENT is the
+   question. Catalogue and findings: `docs/analysis.md`. Then the **playground** (DuckDB-WASM or PGlite in `site/`).
 
 Pinned sources live in `config/sources.env`. Changing a commit changes the data.
 
@@ -58,6 +61,9 @@ Pinned sources live in `config/sources.env`. Changing a commit changes the data.
   and the status page, and pin it with a test so a *new* problem fails the build.
 - Project agents in `.claude/agents/` load only when the session starts inside this repo;
   from elsewhere, use `general-purpose` with the agent's brief (and `model: haiku` for the profiler).
+- **Indexes must earn their place**: add one only with a `scripts/bench.py` benchmark showing
+  the gain; record rejected candidates too. Prefer fixing query shape (correlated
+  subqueries → one aggregate/window pass) before adding indexes.
 - SQL style: lowercase identifiers, uppercase keywords, CTEs over nested subqueries,
   explicit `CROSS JOIN LATERAL jsonb_array_elements(...)` for JSON arrays.
 - Attribution: anything published must credit StatsBomb as the data source (and use

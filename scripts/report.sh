@@ -33,6 +33,14 @@ SELECT json_build_object(
       JOIN model.team at ON at.team_id = m.away_team_id
       JOIN model.player p ON p.player_id = (q.record_key->>'player_id')::int
       GROUP BY 1, 2) q),
+  'analysis', (
+    SELECT json_agg(json_build_object('name', v.name, 'question', obj_description(c.oid, 'pg_class'),
+                                      'rows', analysis.view_rows(v.name, 40)) ORDER BY v.ord)
+    FROM unnest(ARRAY['group_table', 'team_xg', 'player_finishing', 'player_per90', 'team_ppda',
+                      'team_possession', 'team_high_turnovers', 'team_game_state', 'goalkeeper',
+                      'shot_zones', 'final_pass_network', 'substitute_impact', 'shootout'])
+         WITH ORDINALITY AS v (name, ord)
+    JOIN pg_class c ON c.relname = v.name AND c.relnamespace = 'analysis'::regnamespace),
   'matches', (
     SELECT json_agg(r ORDER BY r.match_date, r.match_id) FROM audit.score_reconciliation r)
 );

@@ -48,7 +48,7 @@ check that the tests catch them:
 ## The model
 
 `make model` rebuilds 29 typed, constrained tables from raw in one transaction, in about 17 seconds.
-The 40 tests also check the model against the outside world and the rules of the game:
+The tests also check the model against the outside world and the rules of the game:
 
 - Model-derived goals equal all 64 published scores.
 - Top scorers equal FIFA's Golden Boot (Mbappé 8, Messi 7, Álvarez 4, Giroud 4).
@@ -61,6 +61,26 @@ Building the model surfaced more upstream problems, such as Morocco having no gr
 label and phantom lineup spells. Each is handled and pinned by
 a test. Design decisions and the full list are in [docs/model.md](docs/model.md).
 
+## Analysis
+
+13 analyst questions are answered as SQL views (`make analysis`). Examples: group
+tables, xG against goals, PPDA pressing, high turnovers, game state, goalkeeper
+goals prevented, pass networks, and per-90 output from minutes derived from the
+event stream. Each view is checked against published figures or the rules of the
+game: assist leaders, shootouts, and match time fully covered by the game-state
+segments. The catalogue, findings and metric definitions are in
+[docs/analysis.md](docs/analysis.md).
+
+**Performance evidence** (`make bench`, from `EXPLAIN ANALYZE`):
+
+- Three indexes are kept, each 7–12× faster on its own access pattern.
+- One candidate index was measured and rejected.
+- Two query rewrites (correlated subqueries replaced by window or aggregate
+  passes) are 8× and 23× faster.
+- A materialized view takes the single-match pass network from 1 s to 0.07 ms.
+
+All plans are in [docs/perf/README.md](docs/perf/README.md).
+
 ## Layout
 
 ```
@@ -70,6 +90,8 @@ docker/postgres/          Postgres 16 + pgTAP + pg_prove image
 sql/raw/                  raw layer (one row per file, jsonb)
 sql/audit/                reconciliation views over raw
 sql/stg/, sql/model/      staging (jsonb per record) and the canonical typed model
+sql/analysis/             one view per analyst question
+scripts/bench.py          EXPLAIN ANALYZE before/after for every index and rewrite
 tests/pgtap/              pgTAP tests, run by `make test` and CI
 site/                     local status page (later: the browser SQL playground)
 ```
@@ -80,8 +102,8 @@ site/                     local status page (later: the browser SQL playground)
 |---|---|
 | Foundation: raw ingest + reconciliation | Done |
 | Canonical model: 29 typed tables with the grain stated per table; see [docs/model.md](docs/model.md) | Done |
-| 10–15 analyst queries (group tables, xG vs goals, pass networks, pressures per 90) with `EXPLAIN ANALYZE` evidence | Next |
-| Browser SQL playground (DuckDB-WASM or PGlite) with auto-checked challenges, on GitHub Pages | Planned |
+| 13 analyst questions with `EXPLAIN ANALYZE` evidence; see [docs/analysis.md](docs/analysis.md) | Done |
+| Browser SQL playground (DuckDB-WASM or PGlite) with auto-checked challenges, on GitHub Pages | Next |
 
 ## Credits
 

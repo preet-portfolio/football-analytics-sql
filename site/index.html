@@ -77,7 +77,7 @@
   table { border-collapse: collapse; width: 100%; background: var(--sheet); border: 1px solid var(--rule); }
   th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); font-size: .95rem; }
   th { font-weight: 600; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   code { font-size: .85em; }
   .table-wrap { overflow-x: auto; }
 
@@ -92,6 +92,13 @@
   .layer { color: var(--muted); font-size: .85rem; }
   .issues { padding-left: 20px; max-width: 75ch; }
   .issues li { margin-bottom: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .tabs button { font: 500 .9rem/1.2 "Public Sans", sans-serif; color: var(--ink); background: var(--sheet);
+    border: 1px solid var(--rule); padding: 7px 11px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--pitch); border-color: var(--pitch); color: var(--sheet); }
+  .question { font-family: "Barlow Condensed", sans-serif; font-size: 1.45rem; font-weight: 600; margin: 0 0 10px; }
+  .speedup { font-weight: 600; color: var(--pitch); }
+  .speedup.flat { color: var(--muted); font-weight: 500; }
   .empty { background: var(--sheet); border: 1px dashed var(--rule); padding: 20px; }
   footer { margin-top: 64px; color: var(--muted); font-size: .9rem; max-width: 70ch; }
   :focus-visible { outline: 3px solid var(--pitch); outline-offset: 2px; }
@@ -107,6 +114,15 @@
   <h2>Every match, three witnesses</h2>
   <p class="note">Each score is checked three ways: goals counted from StatsBomb's raw event stream, the score StatsBomb publishes, and the independent openfootball record. A red edge means the witnesses disagree.</p>
   <div id="ledger"><p class="empty">No matches loaded yet.</p></div>
+
+  <h2>Analysis</h2>
+  <p class="note">Analyst questions answered as SQL views in the <code>analysis</code> schema. Pick a question to see its answer.</p>
+  <div class="tabs" role="tablist" id="analysis-tabs"></div>
+  <div id="analysis-body"><p class="empty">Analysis views have not been built yet. Run <code>make analysis</code>.</p></div>
+
+  <h2>Query performance</h2>
+  <p class="note">Median <code>EXPLAIN ANALYZE</code> time before and after each change, from <code>make bench</code>. An index is kept only when it measurably helps; the rejected candidate and the control are shown too.</p>
+  <div class="table-wrap" id="perf"><p class="empty">No benchmark yet. Run <code>make bench</code>.</p></div>
 
   <h2>The model</h2>
   <p class="note">Typed tables rebuilt from raw in one transaction. Each states its grain: what one row means.</p>
@@ -169,7 +185,7 @@ function render(status, tap) {
     { name: "Load", state: loaded ? "done" : "pending", label: loaded ? `${(status.sources || []).reduce((a, s) => a + s.files, 0)} files in raw` : "Not run" },
     { name: "Reconcile", state: !tap ? "pending" : tap.fail ? "failed" : "done", label: !tap ? "Not run" : tap.fail ? `${tap.fail} failing` : `${tap.pass} tests pass` },
     { name: "Model", state: modelRows ? "done" : "next", label: modelRows ? `${modelTables.filter((t) => t.layer === "model").length} tables, ${modelRows.toLocaleString()} rows` : "Next: canonical schema" },
-    { name: "Analyse", state: "next", label: "Later: analyst queries" },
+    { name: "Analyse", state: (status?.analysis ?? []).length ? "done" : "next", label: (status?.analysis ?? []).length ? `${status.analysis.length} questions answered` : "Next: analyst queries" },
     { name: "Playground", state: "next", label: "Later: SQL in the browser" },
   ];
   $("pipeline").innerHTML = stages.map((s) => `<li class="${s.state}"><span class="stage-name">${s.name}</span><span class="stage-state">${esc(s.label)}</span></li>`).join("");
@@ -238,9 +254,39 @@ function tile(m) {
   </article>`;
 }
 
+let activeView = null;
+function renderAnalysis(list) {
+  if (!list?.length) return;
+  if (!list.some((v) => v.name === activeView)) activeView = list[0].name;
+  $("analysis-tabs").innerHTML = list.map((v) =>
+    `<button role="tab" aria-selected="${v.name === activeView}" data-view="${esc(v.name)}">${esc(v.name.replace(/_/g, " "))}</button>`).join("");
+  const v = list.find((x) => x.name === activeView);
+  const cols = v.rows.length ? Object.keys(v.rows[0]) : [];
+  const isNum = (x) => typeof x === "number";
+  $("analysis-body").innerHTML = `<p class="question">${esc(v.question)}</p>
+    <div class="table-wrap"><table><thead><tr>${cols.map((c) => `<th${isNum(v.rows[0][c]) ? ' class="num"' : ""}>${esc(c.replace(/_/g, " "))}</th>`).join("")}</tr></thead>
+    <tbody>${v.rows.map((r) => `<tr>${cols.map((c) => `<td${isNum(r[c]) ? ' class="num"' : ""}>${esc(r[c] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <p class="note">SQL: <code>SELECT * FROM analysis.${esc(v.name)};</code></p>`;
+  for (const b of $("analysis-tabs").querySelectorAll("button")) {
+    b.onclick = () => { activeView = b.dataset.view; renderAnalysis(list); };
+  }
+}
+
+function renderPerf(perf) {
+  if (!perf?.results?.length) return;
+  const change = (r) => r.kind === "index" ? r.index.map((i) => `<code>${esc(i)}</code>`).join(", ")
+    : r.kind === "candidate" ? `candidate <code>${esc(r.index?.[0] ?? "")}</code>, not kept` : "query rewrite";
+  $("perf").innerHTML = `<table><thead><tr><th>Question</th><th>Change</th><th class="num">Before</th><th class="num">After</th><th class="num">Speed-up</th></tr></thead><tbody>${
+    perf.results.map((r) => `<tr><td>${esc(r.question)}</td><td>${change(r)}</td><td class="num">${r.before.ms} ms</td><td class="num">${r.after.ms} ms</td>
+      <td class="num"><span class="speedup${r.speedup < 1.5 ? " flat" : ""}">×${r.speedup}</span></td></tr>`).join("")
+  }</tbody></table>`;
+}
+
 async function refresh() {
-  const [status, tapText] = await Promise.all([getJSON("data/status.json"), getText("data/tests.tap")]);
+  const [status, tapText, perf] = await Promise.all([getJSON("data/status.json"), getText("data/tests.tap"), getJSON("data/perf.json")]);
   render(status, tapText ? parseTap(tapText) : null);
+  renderAnalysis(status?.analysis);
+  renderPerf(perf);
 }
 refresh();
 setInterval(refresh, 5000);
