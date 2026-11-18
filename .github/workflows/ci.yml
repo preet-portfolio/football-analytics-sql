@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rebuild-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache raw downloads
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: raw-${{ hashFiles('config/sources.env', 'data/checksums.sha256') }}
+
+      # One command rebuilds from raw files; any failing test fails the job.
+      - name: Rebuild from raw and run tests
+        run: make all
+
+      - name: Upload test output and status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: status
+          path: site/data/

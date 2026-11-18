@@ -1,0 +1,8 @@
+FROM postgres:16-bookworm
+
+# pgTAP (in-database unit testing) and pg_prove (TAP test runner).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      postgresql-16-pgtap \
+      libtap-parser-sourcehandler-pgtap-perl \
+ && rm -rf /var/lib/apt/lists/*

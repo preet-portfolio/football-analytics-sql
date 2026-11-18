@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qatar 2022 Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3f6f2;
+    --sheet: #ffffff;
+    --ink: #17202b;
+    --muted: #5b6875;
+    --rule: #d5ddd6;
+    --pitch: #1f5e3b;
+    --pitch-soft: #e1eee5;
+    --yellow: #b8860b;
+    --red: #b3261e;
+    --red-soft: #fbe7e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f1a14; --sheet: #15241b; --ink: #e9efe9; --muted: #9fb0a5;
+      --rule: #2b3d32; --pitch: #6cc48f; --pitch-soft: #1b3325;
+      --yellow: #e2b94b; --red: #f08a80; --red-soft: #3a1d1b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f1a14; --sheet: #15241b; --ink: #e9efe9; --muted: #9fb0a5;
+    --rule: #2b3d32; --pitch: #6cc48f; --pitch-soft: #1b3325;
+    --yellow: #e2b94b; --red: #f08a80; --red-soft: #3a1d1b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 400 16px/1.55 "Public Sans", system-ui, sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1, h2, .score, .stage-name { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; }
+  h1 { font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: .95; font-weight: 700; margin: 0 0 16px; letter-spacing: -.01em; }
+  h2 { font-size: 1.9rem; font-weight: 600; margin: 56px 0 4px; }
+  .lede { font-size: 1.2rem; max-width: 62ch; margin: 0; }
+  .lede strong { font-weight: 600; }
+  .note { color: var(--muted); max-width: 70ch; margin: 0 0 20px; }
+  a { color: var(--pitch); }
+
+  /* Pipeline: a real sequence, so it is numbered. */
+  .pipeline { list-style: none; padding: 0; margin: 32px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border-top: 3px solid var(--ink); }
+  .pipeline li { padding: 12px 14px 14px 0; border-right: 1px solid var(--rule); margin-right: 14px; }
+  .pipeline li:last-child { border-right: 0; }
+  .stage-name { font-size: 1.35rem; font-weight: 600; display: block; }
+  .stage-state { font-size: .9rem; color: var(--muted); }
+  .pipeline .done .stage-state { color: var(--pitch); font-weight: 600; }
+  .pipeline .failed .stage-state { color: var(--red); font-weight: 600; }
+  .pipeline .next { opacity: .55; }
+
+  /* Match ledger: the memorable element. */
+  .round { margin-top: 28px; }
+  .round h3 { font: 600 1rem/1.2 "Public Sans", sans-serif; color: var(--muted); margin: 0 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+  .match {
+    background: var(--sheet); border: 1px solid var(--rule); border-left: 5px solid var(--pitch);
+    padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; align-content: start;
+  }
+  .match.bad { border-left-color: var(--red); background: var(--red-soft); }
+  .team { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score { font-size: 1.6rem; font-weight: 700; line-height: 1.1; text-align: right; font-variant-numeric: tabular-nums; }
+  .pens { grid-column: 1 / -1; font-size: .85rem; color: var(--muted); font-weight: 500; }
+  .witnesses { grid-column: 1 / -1; display: flex; gap: 12px; font-size: .8rem; color: var(--muted); margin-top: 6px; border-top: 1px dashed var(--rule); padding-top: 6px; }
+  .w { white-space: nowrap; }
+  .w.ok::before { content: "✓ "; color: var(--pitch); font-weight: 700; }
+  .w.no { color: var(--red); font-weight: 600; }
+  .w.no::before { content: "✗ "; }
+
+  table { border-collapse: collapse; width: 100%; background: var(--sheet); border: 1px solid var(--rule); }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); font-size: .95rem; }
+  th { font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { font-size: .85em; }
+  .table-wrap { overflow-x: auto; }
+
+  .tap { list-style: none; padding: 0; margin: 0; background: var(--sheet); border: 1px solid var(--rule); }
+  .tap li { padding: 7px 12px; border-bottom: 1px solid var(--rule); font-size: .95rem; }
+  .tap li.file { font-weight: 600; background: var(--pitch-soft); }
+  .tap li.ok::before { content: "✓ "; color: var(--pitch); font-weight: 700; }
+  .tap li.notok { color: var(--red); font-weight: 600; }
+  .tap li.notok::before { content: "✗ "; }
+  .tap li.diag { color: var(--red); font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; padding-left: 28px; }
+
+  .empty { background: var(--sheet); border: 1px dashed var(--rule); padding: 20px; }
+  footer { margin-top: 64px; color: var(--muted); font-size: .9rem; max-width: 70ch; }
+  :focus-visible { outline: 3px solid var(--pitch); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Qatar 2022, rebuilt from raw events</h1>
+  <p class="lede" id="verdict">Waiting for the first report. Run <code>make all</code>, and this page refreshes on its own.</p>
+
+  <ol class="pipeline" id="pipeline" aria-label="Build stages"></ol>
+
+  <h2>Every match, three witnesses</h2>
+  <p class="note">Each score is checked three ways: goals counted from StatsBomb's raw event stream, the score StatsBomb publishes, and the independent openfootball record. A red edge means the witnesses disagree.</p>
+  <div id="ledger"><p class="empty">No matches loaded yet.</p></div>
+
+  <h2>Raw sources</h2>
+  <p class="note">Files are stored untouched, one row per file in <code>raw.source_file</code>, pinned to an upstream commit and checksummed.</p>
+  <div class="table-wrap" id="sources"><p class="empty">Nothing loaded yet.</p></div>
+
+  <h2>Test run</h2>
+  <p class="note">pgTAP output from the last <code>make test</code>. CI fails on any line marked with a cross.</p>
+  <div id="tests"><p class="empty">Tests have not run yet.</p></div>
+
+  <footer>
+    <p>Data: <a href="https://github.com/statsbomb/open-data">StatsBomb Open Data</a> and <a href="https://github.com/openfootball/worldcup.json">openfootball</a>. Concepts inspired by <em>Learn SQL Through Football</em> by Hamed Tabrizchi (Apress, 2026); no code from the book is reused.</p>
+    <p id="stamp"></p>
+  </footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtBytes = (b) => b > 1e6 ? (b / 1e6).toFixed(1) + " MB" : (b / 1e3).toFixed(1) + " kB";
+
+async function getJSON(url) { try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? r.json() : null; } catch { return null; } }
+async function getText(url) { try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? r.text() : null; } catch { return null; } }
+
+function parseTap(text) {
+  const items = []; let pass = 0, fail = 0;
+  for (const line of text.split("\n")) {
+    const file = line.match(/^\/tests\/pgtap\/(\S+?)\s*\.+/);
+    const t = line.match(/^\s*(not ok|ok)\s+\d+\s+-\s+(.*)$/);
+    if (file) items.push({ kind: "file", text: file[1] });
+    else if (t) { const ok = t[1] === "ok"; ok ? pass++ : fail++; items.push({ kind: ok ? "ok" : "notok", text: t[2] }); }
+    else if (/^\s*#\s+\S/.test(line) && fail && !/Looks like/.test(line)) items.push({ kind: "diag", text: line.replace(/^\s*#\s?/, "") });
+  }
+  const finished = /^Result: (PASS|FAIL)/m.exec(text);
+  return { items, pass, fail, result: finished ? finished[1] : null };
+}
+
+function render(status, tap) {
+  const matches = status?.matches ?? [];
+  const bad = matches.filter((m) => !(m.events_agree && m.external_agree && m.shootout_agree));
+  const loaded = (status?.sources ?? []).length > 0;
+
+  if (matches.length) {
+    $("verdict").innerHTML = bad.length === 0
+      ? `<strong>${matches.length} of ${matches.length} scores agree</strong> across raw events, StatsBomb and openfootball, from ${Number(status.event_count).toLocaleString()} raw events.`
+      : `<strong>${bad.length} of ${matches.length} matches disagree.</strong> They are marked in red below; the failing test lists the exact numbers.`;
+  }
+
+  const stages = [
+    { name: "Fetch", state: loaded ? "done" : "pending", label: loaded ? "Pinned and checksummed" : "Not run" },
+    { name: "Load", state: loaded ? "done" : "pending", label: loaded ? `${(status.sources || []).reduce((a, s) => a + s.files, 0)} files in raw` : "Not run" },
+    { name: "Reconcile", state: !tap ? "pending" : tap.fail ? "failed" : "done", label: !tap ? "Not run" : tap.fail ? `${tap.fail} failing` : `${tap.pass} tests pass` },
+    { name: "Model", state: "next", label: "Next: canonical schema" },
+    { name: "Analyse", state: "next", label: "Later: analyst queries" },
+    { name: "Playground", state: "next", label: "Later: SQL in the browser" },
+  ];
+  $("pipeline").innerHTML = stages.map((s) => `<li class="${s.state}"><span class="stage-name">${s.name}</span><span class="stage-state">${esc(s.label)}</span></li>`).join("");
+
+  if (matches.length) {
+    const rounds = [];
+    for (const m of matches) { let r = rounds.find((x) => x.name === m.stage); if (!r) rounds.push(r = { name: m.stage, list: [] }); r.list.push(m); }
+    $("ledger").innerHTML = rounds.map((r) => `
+      <section class="round"><h3>${esc(r.name)}, ${r.list.length} ${r.list.length === 1 ? "match" : "matches"}</h3><div class="grid">${r.list.map(tile).join("")}</div></section>`).join("");
+  }
+
+  if (loaded) {
+    $("sources").innerHTML = `<table><thead><tr><th>Source</th><th>Entity</th><th class="num">Files</th><th class="num">Size</th><th>Pinned commit</th></tr></thead><tbody>${
+      status.sources.map((s) => `<tr><td>${esc(s.source)}</td><td>${esc(s.entity)}</td><td class="num">${s.files}</td><td class="num">${fmtBytes(s.bytes)}</td><td><code>${esc(s.source_ref.slice(0, 10))}</code></td></tr>`).join("")
+    }</tbody></table>`;
+  }
+
+  if (tap) {
+    $("tests").innerHTML = `<ul class="tap">${tap.items.map((i) => `<li class="${i.kind}">${esc(i.text)}</li>`).join("")}</ul>`;
+  }
+  if (status) $("stamp").textContent = `Report generated ${new Date(status.generated_at).toLocaleString()}.`;
+}
+
+function tile(m) {
+  const ok = m.events_agree && m.external_agree && m.shootout_agree;
+  const pens = (m.ev_pen_home || m.ev_pen_away) ? `<span class="pens">${esc(m.home_team)} ${m.ev_pen_home}–${m.ev_pen_away} ${esc(m.away_team)} on penalties</span>` : "";
+  const w = (good, label, detail) => `<span class="w ${good ? "ok" : "no"}" title="${esc(detail)}">${label}${good ? "" : " " + esc(detail)}</span>`;
+  return `<article class="match${ok ? "" : " bad"}" aria-label="${esc(m.home_team)} ${m.sb_home}, ${esc(m.away_team)} ${m.sb_away}">
+    <span class="team">${esc(m.home_team)}</span><span class="score">${m.sb_home}</span>
+    <span class="team">${esc(m.away_team)}</span><span class="score">${m.sb_away}</span>
+    ${pens}
+    <div class="witnesses">
+      ${w(m.events_agree, "Events", `${m.ev_home}–${m.ev_away}`)}
+      ${w(m.external_agree, "openfootball", m.of_found ? `${m.of_home}–${m.of_away}` : "not found")}
+      ${(m.ev_pen_home || m.ev_pen_away || m.of_pen_home != null || !m.shootout_agree) ? w(m.shootout_agree, "Shootout", `${m.ev_pen_home}–${m.ev_pen_away} vs ${m.of_pen_home ?? 0}–${m.of_pen_away ?? 0}`) : ""}
+    </div>
+  </article>`;
+}
+
+async function refresh() {
+  const [status, tapText] = await Promise.all([getJSON("data/status.json"), getText("data/tests.tap")]);
+  render(status, tapText ? parseTap(tapText) : null);
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

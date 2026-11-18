@@ -1,0 +1,23 @@
+services:
+  db:
+    build: ./docker/postgres
+    image: football-analytics-sql/postgres:16
+    environment:
+      POSTGRES_USER: football
+      POSTGRES_PASSWORD: football
+      POSTGRES_DB: football
+    ports:
+      - "5433:5432"   # connect a GUI client to localhost:5433
+    volumes:
+      - ./data/raw:/data/raw:ro   # raw files are read server-side by raw.load_file()
+      - ./sql:/sql:ro
+      - ./tests:/tests:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U football -d football"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
