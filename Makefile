@@ -6,10 +6,11 @@ COMPOSE := docker compose
 PORT    ?= 8000
 
 ## all: rebuild everything from the pinned raw files and run every test
-all: up fetch load report test
+all: fetch up load report test
 
 ## up: build the Postgres 16 + pgTAP image and start it
 up:
+	mkdir -p data/raw   # create the bind-mount dir as the current user, not root
 	$(COMPOSE) up -d --build --wait db
 
 ## fetch: download pinned source files to data/raw and verify checksums
