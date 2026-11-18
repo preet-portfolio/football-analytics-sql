@@ -1,0 +1,46 @@
+name: pages
+
+# Manual: rebuilds everything, runs every test, and publishes site/ (status page
+# + SQL playground) to GitHub Pages. Nothing is published if a test fails.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: raw-${{ hashFiles('config/sources.env', 'data/checksums.sha256') }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+      - name: Rebuild from raw and run tests
+        run: make all
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

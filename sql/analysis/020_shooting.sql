@@ -2,13 +2,17 @@
 
 -- Helper: shots in play (no shootout kicks) with distance and angle to goal.
 -- Goal mouth: posts at (120, 36) and (120, 44). The angle is the visible goal
--- width from the shot location, a standard xG feature.
+-- width from the shot location, a standard xG feature. It is rounded to 6
+-- decimals because atan2() differs in the last binary digit between C maths
+-- libraries: unrounded, Postgres on Linux and PGlite in the browser disagree on
+-- 31 of 1,453 shots in the 15th significant digit (caught by playground/test.mjs).
 CREATE VIEW analysis.shot_detail AS
 SELECT s.event_id, e.match_id, e.team_id, e.player_id, s.xg, s.is_goal, s.outcome, s.shot_type, s.body_part,
        (s.shot_type = 'Penalty') AS is_penalty,
        s.outcome IN ('Goal', 'Saved', 'Saved to Post') AS on_target,
        sqrt((120 - e.location_x) ^ 2 + (40 - e.location_y) ^ 2) AS distance,
-       degrees(abs(atan2(44 - e.location_y, 120 - e.location_x) - atan2(36 - e.location_y, 120 - e.location_x)))::numeric AS angle_deg
+       round(degrees(abs(atan2(44 - e.location_y, 120 - e.location_x)
+                         - atan2(36 - e.location_y, 120 - e.location_x)))::numeric, 6) AS angle_deg
 FROM model.shot s JOIN model.event e USING (event_id)
 WHERE e.period < 5;
 COMMENT ON VIEW analysis.shot_detail IS 'Helper: every in-play shot with its distance (yards) and visible goal angle.';

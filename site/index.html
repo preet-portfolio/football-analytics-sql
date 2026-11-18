@@ -90,6 +90,8 @@
   .tap li.diag { color: var(--red); font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; padding-left: 28px; }
 
   .layer { color: var(--muted); font-size: .85rem; }
+  .playground-link { margin: 18px 0 0; font-size: 1.05rem; }
+  .playground-link a { font-weight: 600; }
   .issues { padding-left: 20px; max-width: 75ch; }
   .issues li { margin-bottom: 10px; }
   .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
@@ -110,6 +112,7 @@
   <p class="lede" id="verdict">Waiting for the first report. Run <code>make all</code>, and this page refreshes on its own.</p>
 
   <ol class="pipeline" id="pipeline" aria-label="Build stages"></ol>
+  <p class="playground-link" id="playground-link" hidden><a href="playground/">Open the SQL playground</a>: query this database in your browser and work through 12 checked challenges. <span class="layer" id="playground-size"></span></p>
 
   <h2>Every match, three witnesses</h2>
   <p class="note">Each score is checked three ways: goals counted from StatsBomb's raw event stream, the score StatsBomb publishes, and the independent openfootball record. A red edge means the witnesses disagree.</p>
@@ -167,7 +170,7 @@ function parseTap(text) {
   return { items, pass, fail, result: finished ? finished[1] : null };
 }
 
-function render(status, tap) {
+function render(status, tap, pg, pgTap) {
   const matches = status?.matches ?? [];
   const bad = matches.filter((m) => !(m.events_agree && m.external_agree && m.shootout_agree));
   const loaded = (status?.sources ?? []).length > 0;
@@ -186,8 +189,11 @@ function render(status, tap) {
     { name: "Reconcile", state: !tap ? "pending" : tap.fail ? "failed" : "done", label: !tap ? "Not run" : tap.fail ? `${tap.fail} failing` : `${tap.pass} tests pass` },
     { name: "Model", state: modelRows ? "done" : "next", label: modelRows ? `${modelTables.filter((t) => t.layer === "model").length} tables, ${modelRows.toLocaleString()} rows` : "Next: canonical schema" },
     { name: "Analyse", state: (status?.analysis ?? []).length ? "done" : "next", label: (status?.analysis ?? []).length ? `${status.analysis.length} questions answered` : "Next: analyst queries" },
-    { name: "Playground", state: "next", label: "Later: SQL in the browser" },
+    { name: "Playground", state: !pg ? "next" : pgTap?.fail ? "failed" : pgTap ? "done" : "pending",
+      label: !pg ? "Next: SQL in the browser" : pgTap?.fail ? `${pgTap.fail} failing` : pgTap ? `${pgTap.pass} checks pass` : "Built, not tested" },
   ];
+  $("playground-link").hidden = !pg;
+  if (pg) $("playground-size").textContent = `${(pg.bytes / 1e6).toFixed(0)} MB download, ${pg.postgres}`;
   $("pipeline").innerHTML = stages.map((s) => `<li class="${s.state}"><span class="stage-name">${s.name}</span><span class="stage-state">${esc(s.label)}</span></li>`).join("");
 
   if (matches.length) {
@@ -283,8 +289,11 @@ function renderPerf(perf) {
 }
 
 async function refresh() {
-  const [status, tapText, perf] = await Promise.all([getJSON("data/status.json"), getText("data/tests.tap"), getJSON("data/perf.json")]);
-  render(status, tapText ? parseTap(tapText) : null);
+  const [status, tapText, perf, pg, pgTapText] = await Promise.all([getJSON("data/status.json"), getText("data/tests.tap"),
+    getJSON("data/perf.json"), getJSON("playground/data/manifest.json"), getText("data/playground.tap")]);
+  const pgTap = pgTapText && /^# pass \d+/m.test(pgTapText)
+    ? { pass: +pgTapText.match(/^# pass (\d+)/m)[1], fail: +pgTapText.match(/^# fail (\d+)/m)[1] } : null;
+  render(status, tapText ? parseTap(tapText) : null, pg, pgTap);
   renderAnalysis(status?.analysis);
   renderPerf(perf);
 }

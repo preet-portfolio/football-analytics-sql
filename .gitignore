@@ -6,6 +6,11 @@ data/raw/
 site/data/status.json
 site/data/tests.tap
 site/data/perf.json
+site/data/playground.tap
 
 .DS_Store
 .env
+
+# Built by `make playground` (33 MB; rebuilt in CI)
+site/playground/data/
+playground/node_modules/

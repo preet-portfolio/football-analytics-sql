@@ -5,8 +5,8 @@ Cup: 234,637 on-ball events across 64 matches. Each derived number is tested aga
 independently published results.
 
 ```
-make all     # rebuild from raw files and run every test (needs Docker)
-make serve   # status page at http://localhost:8000
+make all     # rebuild from raw files and run every test (needs Docker and Node 20+)
+make serve   # status page at http://localhost:8000, playground at /playground/
 ```
 
 ## Why it's built this way
@@ -81,6 +81,41 @@ segments. The catalogue, findings and metric definitions are in
 
 All plans are in [docs/perf/README.md](docs/perf/README.md).
 
+## SQL playground
+
+`site/playground/` runs the same database in the browser: PostgreSQL 18 compiled to
+WebAssembly ([PGlite](https://pglite.dev)), in a Web Worker, with no server. It offers
+a schema browser that shows each table's grain, free querying, and 12 progressive challenges
+(WHERE → JOINs → GROUP BY/HAVING → NULL semantics → grain and fan-out → intervals →
+RANK → running totals → LATERAL → jsonb data quality). Each challenge is checked
+automatically against a reference answer. Progress stays in your browser.
+
+`make playground` copies the tested model into PGlite and saves its data directory as
+one 33 MB download. `make playground-test` (`node --test`) then proves three things:
+
+- **Parity.** The browser database has the same 48 tables and views as the tested database, with exactly the same
+  rows as the pgTAP-tested Postgres 16 (row count plus a hash of every row). This
+  test caught a real difference: `atan2()` in the browser's C maths library disagreed
+  with Linux in the 15th significant digit for 31 shot angles. The angle is now
+  rounded to 6 decimals.
+- **Answer keys.** Every reference solution passes the checker. Every challenge also
+  lists the classic mistakes it teaches about (counting `outcome` instead of
+  `outcome IS NULL`, the fan-out join, `ROW_NUMBER` dropping tied scorers, and so on),
+  and each of those mistakes must fail. Challenges that use `LIMIT 1` are checked to
+  have no tie at the top, so the answer key never depends on how ties are broken.
+- **Isolation.** Learner queries run as a read-only role inside a transaction that is
+  always rolled back. PGlite's session user is always a superuser, so `RESET ROLE`
+  can't be prevented. Anything done after it is still rolled back, though, and a script
+  that ends the transaction (`COMMIT`, `END`) is detected by its transaction id. The
+  page then reloads a clean copy. The tests try each of these escapes.
+- **Alternatives and near misses.** Challenges also list other correct answers that
+  must pass, such as `DISTINCT ON` instead of `LATERAL`, a timestamp instead of a
+  date, or other rounding. Integers must match exactly. Other numbers match within
+  half a unit of the reference's precision.
+
+`.github/workflows/pages.yml` (run manually) rebuilds everything, runs every test, and
+publishes `site/` to GitHub Pages.
+
 ## Layout
 
 ```
@@ -93,7 +128,8 @@ sql/stg/, sql/model/      staging (jsonb per record) and the canonical typed mod
 sql/analysis/             one view per analyst question
 scripts/bench.py          EXPLAIN ANALYZE before/after for every index and rewrite
 tests/pgtap/              pgTAP tests, run by `make test` and CI
-site/                     local status page (later: the browser SQL playground)
+playground/               builds the PGlite bundle (build.mjs) and tests it (test.mjs)
+site/                     status page (index.html) and the SQL playground (playground/)
 ```
 
 ## Roadmap
@@ -103,7 +139,7 @@ site/                     local status page (later: the browser SQL playground)
 | Foundation: raw ingest + reconciliation | Done |
 | Canonical model: 29 typed tables with the grain stated per table; see [docs/model.md](docs/model.md) | Done |
 | 13 analyst questions with `EXPLAIN ANALYZE` evidence; see [docs/analysis.md](docs/analysis.md) | Done |
-| Browser SQL playground (DuckDB-WASM or PGlite) with auto-checked challenges, on GitHub Pages | Next |
+| Browser SQL playground (PGlite) with 12 auto-checked challenges; Pages workflow ready | Done |
 
 ## Credits
 

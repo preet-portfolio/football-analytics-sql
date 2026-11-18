@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qatar 2022 SQL Playground</title>
+<meta name="description" content="Query every event of the 2022 World Cup with real PostgreSQL running in your browser, and work through checked SQL challenges.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3f6f2; --sheet: #ffffff; --ink: #17202b; --muted: #5b6875; --rule: #d5ddd6;
+    --pitch: #1f5e3b; --pitch-soft: #e1eee5; --red: #b3261e; --red-soft: #fbe7e5; --editor: #12241a; --editor-ink: #e6efe8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f1a14; --sheet: #15241b; --ink: #e9efe9; --muted: #9fb0a5; --rule: #2b3d32;
+      --pitch: #6cc48f; --pitch-soft: #1b3325; --red: #f08a80; --red-soft: #3a1d1b; --editor: #0a140e; --editor-ink: #e6efe8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f1a14; --sheet: #15241b; --ink: #e9efe9; --muted: #9fb0a5; --rule: #2b3d32;
+    --pitch: #6cc48f; --pitch-soft: #1b3325; --red: #f08a80; --red-soft: #3a1d1b; --editor: #0a140e; --editor-ink: #e6efe8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.55 "Public Sans", system-ui, sans-serif; }
+  a { color: var(--pitch); }
+  code, textarea, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  code { font-size: .86em; background: var(--pitch-soft); padding: 1px 4px; border-radius: 3px; }
+  h1, h2, .challenge-title { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; }
+  :focus-visible { outline: 3px solid var(--pitch); outline-offset: 2px; }
+
+  header { max-width: 1280px; margin: 0 auto; padding: 28px 16px 8px; }
+  header h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: .95; font-weight: 700; margin: 4px 0 10px; }
+  .back { font-size: .95rem; }
+  .lede { max-width: 68ch; margin: 0; }
+  #engine { color: var(--muted); font-size: .9rem; margin: 10px 0 0; min-height: 1.5em; }
+  .bar { height: 4px; background: var(--rule); margin-top: 6px; max-width: 420px; }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--pitch); transition: width .2s; }
+
+  .layout { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  /* Side panel: challenges and tables */
+  aside { background: var(--sheet); border: 1px solid var(--rule); position: sticky; top: 12px; max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+  @media (max-width: 860px) { aside { position: static; max-height: none; } }
+  .tabs { display: flex; border-bottom: 1px solid var(--rule); }
+  .tabs button { flex: 1; font: 600 .95rem/1 "Public Sans", sans-serif; padding: 12px 8px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--pitch); }
+  .panel { overflow-y: auto; }
+  .progress { padding: 12px 14px 4px; font-size: .9rem; color: var(--muted); }
+  .steps { display: flex; gap: 3px; margin-top: 6px; }
+  .steps span { flex: 1; height: 6px; background: var(--rule); }
+  .steps span.solved { background: var(--pitch); }
+  ol.challenges { list-style: none; margin: 0; padding: 4px 0 8px; counter-reset: ch; }
+  ol.challenges li button { width: 100%; text-align: left; background: none; border: 0; border-left: 4px solid transparent; padding: 8px 14px; cursor: pointer; color: var(--ink); display: grid; grid-template-columns: 1.6em 1fr; gap: 0 6px; font: inherit; }
+  ol.challenges li button:hover { background: var(--pitch-soft); }
+  ol.challenges li button[aria-current="true"] { border-left-color: var(--pitch); background: var(--pitch-soft); }
+  .num { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 1.15rem; color: var(--muted); line-height: 1.3; }
+  .solved .num { color: var(--pitch); }
+  .solved .num::after { content: " ✓"; font-size: .9rem; }
+  .ch-name { font-weight: 600; line-height: 1.3; }
+  .ch-concept { grid-column: 2; font-size: .82rem; color: var(--muted); }
+  .free { border-top: 1px solid var(--rule); }
+
+  .tables details { border-bottom: 1px solid var(--rule); }
+  .tables summary { padding: 8px 14px; cursor: pointer; font-size: .92rem; }
+  .tables summary .kind { color: var(--muted); font-size: .8rem; }
+  .tables .grain { padding: 0 14px 6px; font-size: .82rem; color: var(--muted); margin: 0; }
+  .tables ul { list-style: none; margin: 0; padding: 0 14px 10px 26px; font-size: .82rem; }
+  .tables li { display: flex; justify-content: space-between; gap: 8px; }
+  .tables li span:last-child { color: var(--muted); }
+  .tables .schema-name { padding: 12px 14px 4px; font-weight: 600; font-size: .85rem; color: var(--muted); }
+  .insert { background: none; border: 0; color: var(--pitch); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+
+  /* Workspace */
+  .brief { background: var(--sheet); border: 1px solid var(--rule); border-top: 4px solid var(--pitch); padding: 16px 20px; }
+  .challenge-title { font-size: 1.9rem; font-weight: 700; margin: 0; line-height: 1.1; }
+  .concept { color: var(--muted); font-size: .92rem; margin: 2px 0 10px; }
+  .prompt { margin: 0; max-width: 75ch; }
+  .help { display: flex; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+  .help button { background: none; border: 0; padding: 0; color: var(--pitch); font: 500 .92rem "Public Sans", sans-serif; cursor: pointer; text-decoration: underline; }
+  .hint { margin: 12px 0 0; padding: 10px 12px; background: var(--pitch-soft); max-width: 75ch; font-size: .95rem; }
+
+  .editor-wrap { margin-top: 16px; background: var(--editor); border: 1px solid var(--rule); }
+  textarea#sql { display: block; width: 100%; min-height: 220px; resize: vertical; border: 0; background: transparent; color: var(--editor-ink); padding: 14px 16px; font-size: .92rem; line-height: 1.55; tab-size: 2; }
+  textarea#sql:focus-visible { outline: 3px solid var(--pitch); outline-offset: -3px; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid #ffffff1f; }
+  .actions button { font: 600 .95rem "Public Sans", sans-serif; padding: 8px 16px; cursor: pointer; border: 1px solid #ffffff40; background: transparent; color: var(--editor-ink); }
+  .actions button.primary { background: #6cc48f; border-color: #6cc48f; color: #0a140e; }
+  .actions button:disabled { opacity: .45; cursor: not-allowed; }
+  .kbd { color: #9fb0a5; font-size: .82rem; margin-left: auto; }
+
+  .verdict { margin-top: 16px; padding: 12px 16px; border-left: 5px solid var(--pitch); background: var(--pitch-soft); font-weight: 500; }
+  .verdict.bad { border-left-color: var(--red); background: var(--red-soft); }
+  .verdict.error { border-left-color: var(--red); background: var(--red-soft); font-family: "JetBrains Mono", monospace; font-size: .88rem; white-space: pre-wrap; font-weight: 400; }
+  .meta { color: var(--muted); font-size: .88rem; margin: 14px 0 6px; }
+  .result { overflow: auto; max-height: 60vh; background: var(--sheet); border: 1px solid var(--rule); }
+  .result table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  .result th, .result td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+  .result th { position: sticky; top: 0; background: var(--sheet); font-weight: 600; box-shadow: 0 1px 0 var(--rule); }
+  .result td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .result td.null { color: var(--muted); font-style: italic; }
+  footer { max-width: 1280px; margin: 32px auto 0; padding: 0 16px 48px; color: var(--muted); font-size: .88rem; }
+  footer p { max-width: 80ch; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="../">Back to the build ledger</a>
+  <h1>Qatar 2022 SQL playground</h1>
+  <p class="lede">Every pass, shot and tackle of the 2022 World Cup, in real PostgreSQL running inside your browser. Nothing is sent to a server. Pick a challenge, write a query, and the page checks your answer against the reference.</p>
+  <p id="engine" role="status">Starting the database…</p>
+  <div class="bar" id="bar" aria-hidden="true"><span></span></div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-challenges" aria-selected="true" aria-controls="panel-challenges">Challenges</button>
+      <button role="tab" id="tab-tables" aria-selected="false" aria-controls="panel-tables">Tables</button>
+    </div>
+    <div class="panel" id="panel-challenges" role="tabpanel" aria-labelledby="tab-challenges">
+      <div class="progress"><span id="progress-text">0 of 12 solved</span><div class="steps" id="steps"></div></div>
+      <ol class="challenges" id="challenge-list"></ol>
+    </div>
+    <div class="panel tables" id="panel-tables" role="tabpanel" aria-labelledby="tab-tables" hidden>
+      <p class="grain" style="padding-top:12px">Loading tables…</p>
+    </div>
+  </aside>
+
+  <section aria-label="Workspace">
+    <div class="brief" id="brief"></div>
+    <div class="editor-wrap">
+      <label for="sql" class="visually-hidden" style="position:absolute;left:-9999px">SQL query</label>
+      <textarea id="sql" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <div class="actions">
+        <button class="primary" id="run" disabled>Run</button>
+        <button id="stop" disabled>Stop</button>
+        <button id="reset">Reset database</button>
+        <span class="kbd">Ctrl or ⌘ + Enter to run</span>
+      </div>
+    </div>
+    <div id="verdict" aria-live="polite"></div>
+    <p class="meta" id="meta"></p>
+    <div class="result" id="result" hidden></div>
+  </section>
+</div>
+
+<footer>
+  <p>Queries run as a read-only role inside a transaction that is always rolled back; a script that tries to commit is stopped and a clean copy of the database is loaded. The database is the same one the project's pgTAP suite checks: a test compares every table and view here with the tested PostgreSQL, row by row. Data: <a href="https://github.com/statsbomb/open-data">StatsBomb Open Data</a>. Challenges are inspired by the topics of <cite>Learn SQL Through Football</cite> (Apress); no material from the book is reused.</p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -14,7 +14,7 @@ with this project's own model.
 
 | Command | What it does |
 |---|---|
-| `make all` | Rebuild from raw files: start DB, fetch, load, report, test. CI runs this. |
+| `make all` | Rebuild from raw files: start DB, fetch, load, model, analysis, report, test, playground, playground-test. CI runs this. |
 | `make up` | Build and start Postgres 16 + pgTAP (`docker compose`, host port 5433) |
 | `make fetch` | Download pinned sources to `data/raw/`; verify `data/checksums.sha256` |
 | `make load` | Apply `sql/raw/*.sql`, `sql/audit/*.sql`; load every raw file |
@@ -23,6 +23,8 @@ with this project's own model.
 | `make bench` | `EXPLAIN ANALYZE` before/after for every index and rewrite → `docs/perf/README.md` |
 | `make test` | `pg_prove` over `tests/pgtap/`; writes `site/data/tests.tap` |
 | `make report` | Writes `site/data/status.json` for the status page |
+| `make playground` | Copy the model into PGlite → `site/playground/data/worldcup2022.tar.gz` (~25 s) |
+| `make playground-test` | `node --test`: PGlite ≡ Docker Postgres per relation; answer keys accept solutions, reject `wrong` |
 | `make serve` | Status page at http://localhost:8000 (auto-refreshes every 5 s) |
 | `make psql` | SQL shell. `make lock` re-records checksums after changing a pinned commit. |
 
@@ -41,7 +43,10 @@ No host `psql`; always go through `docker compose exec db ...`.
 4. **model** (`sql/model/`) — typed, constrained tables; event supertype + subtype tables.
    Design decisions and known upstream problems: `docs/model.md`.
 5. **analysis** (`sql/analysis/`) — one view per analyst question; each view's COMMENT is the
-   question. Catalogue and findings: `docs/analysis.md`. Then the **playground** (DuckDB-WASM or PGlite in `site/`).
+   question. Catalogue and findings: `docs/analysis.md`.
+6. **playground** (`playground/` builds, `site/playground/` serves) — PGlite (Postgres 18
+   in WASM) in a Web Worker; `check.js` is shared by page and tests; `challenges.js`
+   holds each challenge's `solution` and `wrong` variants.
 
 Pinned sources live in `config/sources.env`. Changing a commit changes the data.
 
@@ -68,6 +73,10 @@ Pinned sources live in `config/sources.env`. Changing a commit changes the data.
   explicit `CROSS JOIN LATERAL jsonb_array_elements(...)` for JSON arrays.
 - Attribution: anything published must credit StatsBomb as the data source (and use
   their logo per their open-data README) and credit the book as inspiration.
+- **Challenges:** every challenge needs at least one `wrong` variant that the checker
+  rejects; never use `LIMIT` where a tie decides the answer (use thresholds, or add
+  `tiesAtLimit`). Any analysis SQL must give identical rows in PGlite: round floating
+  maths (atan2, sqrt of sums) to a sensible precision, or the parity test fails.
 - Stop for user review at the end of each phase (foundation, model, analysis, playground).
 
 ## How to work here (Claude)

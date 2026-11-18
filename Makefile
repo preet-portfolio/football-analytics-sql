@@ -1,12 +1,12 @@
 .DEFAULT_GOAL := all
-.PHONY: all up fetch load model analysis bench test report serve psql lock down clean
+.PHONY: all up fetch load model analysis bench test report playground playground-test serve psql lock down clean
 
 SHELL   := /bin/bash
 COMPOSE := docker compose
 PORT    ?= 8000
 
 ## all: rebuild everything from the pinned raw files and run every test
-all: fetch up load model analysis report test
+all: fetch up load model analysis report test playground playground-test
 
 ## up: build the Postgres 16 + pgTAP image and start it
 up:
@@ -38,6 +38,16 @@ test:
 	@mkdir -p site/data
 	@$(COMPOSE) exec -T db pg_prove -U football -d football --verbose --ext .sql /tests/pgtap/ \
 	  | tee site/data/tests.tap; exit $${PIPESTATUS[0]}
+
+## playground: build the browser database (PGlite) -> site/playground/data/
+playground:
+	cd playground && npm ci --no-audit --no-fund --loglevel=error && node build.mjs
+
+## playground-test: browser DB matches tested Postgres; answer keys accept/reject correctly
+playground-test:
+	@mkdir -p site/data
+	cd playground && node --test --test-reporter=spec --test-reporter-destination=stdout \
+	  --test-reporter=tap --test-reporter-destination=../site/data/playground.tap test.mjs
 
 ## report: export pipeline state to site/data/status.json
 report:
