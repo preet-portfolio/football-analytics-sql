@@ -4,6 +4,10 @@ A PostgreSQL database built from **raw StatsBomb event data** for the 2022 FIFA 
 Cup: 234,637 on-ball events across 64 matches. Each derived number is tested against
 independently published results.
 
+**Live:** [status page](https://preet-portfolio.github.io/football-analytics-sql/) and
+[SQL playground](https://preet-portfolio.github.io/football-analytics-sql/playground/)
+(real PostgreSQL in your browser; a 34 MB download on first visit).
+
 ```
 make all     # rebuild from raw files and run every test (needs Docker and Node 20+)
 make serve   # status page at http://localhost:8000, playground at /playground/
