@@ -146,7 +146,7 @@ site/                     status page (index.html) and the SQL playground (playg
 | Foundation: raw ingest + reconciliation | Done |
 | Canonical model: 29 typed tables with the grain stated per table; see [docs/model.md](docs/model.md) | Done |
 | 13 analyst questions with `EXPLAIN ANALYZE` evidence; see [docs/analysis.md](docs/analysis.md) | Done |
-| Browser SQL playground (PGlite) with 12 auto-checked challenges; Pages workflow ready | Done |
+| Browser SQL playground (PGlite) with 12 auto-checked challenges, live on GitHub Pages | Done |
 
 ## Credits
 
