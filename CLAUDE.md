@@ -23,7 +23,7 @@ with this project's own model.
 | `make bench` | `EXPLAIN ANALYZE` before/after for every index and rewrite → `docs/perf/README.md` |
 | `make test` | `pg_prove` over `tests/pgtap/`; writes `site/data/tests.tap` |
 | `make report` | Writes `site/data/status.json` for the status page |
-| `make playground` | Copy the model into PGlite → `site/playground/data/worldcup2022.tar.gz` (~25 s) |
+| `make playground` | Copy the model into PGlite → `site/playground/data/worldcup2022.tar.xz` (~60 s; needs the `xz` command) |
 | `make playground-test` | `node --test`: PGlite ≡ Docker Postgres per relation; answer keys accept solutions, reject `wrong` |
 | `make serve` | Status page at http://localhost:8000 (auto-refreshes every 5 s) |
 | `make psql` | SQL shell. `make lock` re-records checksums after changing a pinned commit. |

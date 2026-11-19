@@ -13,19 +13,21 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import xzDecompress from "xz-decompress"; // the same decoder (and version) the page loads from jsDelivr
 import { challenges } from "../site/playground/challenges.js";
 import { checkResult } from "../site/playground/check.js";
 import { runLearnerSql } from "../site/playground/runner.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const BUNDLE = join(ROOT, "site/playground/data/worldcup2022.tar.gz");
+const BUNDLE = join(ROOT, "site/playground/data/worldcup2022.tar.xz");
 let db;
 
 // Same execution path as the page's worker.
 const runAsLearner = (sql) => runLearnerSql(db, sql);
 
 before(async () => {
-  db = await PGlite.create({ loadDataDir: new Blob([readFileSync(BUNDLE)]) });
+  const tar = await new Response(new xzDecompress.XzReadableStream(new Blob([readFileSync(BUNDLE)]).stream())).blob();
+  db = await PGlite.create({ loadDataDir: tar });
 });
 after(() => db?.close());
 

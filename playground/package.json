@@ -8,6 +8,7 @@
     "test": "node --test test.mjs"
   },
   "dependencies": {
-    "@electric-sql/pglite": "0.5.14"
+    "@electric-sql/pglite": "0.5.14",
+    "xz-decompress": "0.2.3"
   }
 }

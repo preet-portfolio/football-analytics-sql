@@ -6,7 +6,7 @@ independently published results.
 
 **Live:** [status page](https://preet-portfolio.github.io/football-analytics-sql/) and
 [SQL playground](https://preet-portfolio.github.io/football-analytics-sql/playground/)
-(real PostgreSQL in your browser; a 34 MB download on first visit).
+(real PostgreSQL in your browser; a 15 MB download on first visit).
 
 ```
 make all     # rebuild from raw files and run every test (needs Docker and Node 20+)
@@ -95,7 +95,7 @@ RANK → running totals → LATERAL → jsonb data quality). Each challenge is c
 automatically against a reference answer. Progress stays in your browser.
 
 `make playground` copies the tested model into PGlite and saves its data directory as
-one 33 MB download. `make playground-test` (`node --test`) then proves three things:
+one 15 MB xz download (34 MB as gzip), which the page unpacks while it downloads. `make playground-test` (`node --test`) then proves three things:
 
 - **Parity.** The browser database has the same 48 tables and views as the tested database, with exactly the same
   rows as the pgTAP-tested Postgres 16 (row count plus a hash of every row). This

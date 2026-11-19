@@ -1,17 +1,20 @@
 // Build the browser playground's database: copy the tested model from the Docker
 // Postgres into PGlite (Postgres in WebAssembly), create the same analysis views,
-// and save PGlite's data directory as one gzipped tarball the page loads directly.
+// and save PGlite's data directory as one xz-compressed tarball the page loads directly.
 //
-//   node build.mjs   ->  site/playground/data/worldcup2022.tar.gz
+//   node build.mjs   ->  site/playground/data/worldcup2022.tar.xz
+//
+// xz instead of gzip because the download is what makes the page slow to open:
+// the same tarball is 15 MB as xz -9 and 34 MB as gzip. The browser unpacks it
+// with xz-decompress (WebAssembly) while it downloads. Needs the `xz` command.
 import { PGlite } from "@electric-sql/pglite";
-import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, statSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, statSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = join(ROOT, "site/playground/data/worldcup2022.tar.gz");
+const OUT = join(ROOT, "site/playground/data/worldcup2022.tar.xz");
 
 // event_relation (330k links) is left out to keep the download small; nothing
 // in the playground needs it.
@@ -97,12 +100,16 @@ const dump = await db.dumpDataDir("none");
 step("dumped");
 const tar = withoutStaleWal(Buffer.from(await dump.arrayBuffer()), keepWal);
 step("stale WAL dropped");
-writeFileSync(OUT, gzipSync(tar));
+// -9 without -e: -9e saves under 0.1 MB and takes half as long again.
+const xz = spawnSync("xz", ["-9", "-T1", "-c"], { input: tar, maxBuffer: 1 << 30 });
+if (xz.error || xz.status !== 0) throw new Error(`xz failed: ${xz.error?.message ?? xz.stderr}. Install xz (brew install xz / apt install xz-utils).`);
+writeFileSync(OUT, xz.stdout);
+rmSync(join(dirname(OUT), "worldcup2022.tar.gz"), { force: true }); // the old gzip bundle
 step("compressed");
 const version = (await db.query("SELECT version() AS v")).rows[0].v.split(" on ")[0];
 await db.close();
 writeFileSync(join(dirname(OUT), "manifest.json"), JSON.stringify({
-  file: "worldcup2022.tar.gz", bytes: statSync(OUT).size, postgres: version,
+  file: "worldcup2022.tar.xz", bytes: statSync(OUT).size, unpacked_bytes: tar.length, postgres: version,
   pglite: JSON.parse(readFileSync(join(ROOT, "playground/node_modules/@electric-sql/pglite/package.json"), "utf8")).version,
   tables: tables.length, built_at: new Date().toISOString(),
 }, null, 2));

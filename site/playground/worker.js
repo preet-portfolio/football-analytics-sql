@@ -1,28 +1,45 @@
 // Runs PGlite (PostgreSQL compiled to WebAssembly) off the main thread, so a slow
 // query never freezes the page and "Stop" can simply terminate this worker.
 import { PGlite } from "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14/dist/index.js";
+import xzDecompress from "https://cdn.jsdelivr.net/npm/xz-decompress@0.2.3/+esm"; // CommonJS: only a default export
 import { runLearnerSql } from "./runner.js";
 
-const DATA = new URL("./data/worldcup2022.tar.gz", self.location.href);
-let db, bundle;
+const DATA = new URL("./data/worldcup2022.tar.xz", self.location.href);
+const PGLITE = "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14/dist/";
+let db, bundle, runtime;
+
+// PGlite would only fetch its engine (pglite.wasm) and base files (pglite.data)
+// once the database had finished downloading. Fetch and compile them alongside
+// it instead, and keep them for the reload after an escape. If prefetching fails,
+// PGlite.create falls back to fetching them itself.
+function prefetchRuntime() {
+  const wasm = WebAssembly.compileStreaming(fetch(PGLITE + "pglite.wasm"));
+  const data = fetch(PGLITE + "pglite.data").then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.status))));
+  return Promise.all([wasm, data])
+    .then(([pgliteWasmModule, fsBundle]) => ({ pgliteWasmModule, fsBundle }))
+    .catch(() => ({}));
+}
+
+const open = () => PGlite.create({ ...runtime, loadDataDir: bundle });
 
 async function load() {
+  const runtimeReady = prefetchRuntime();
   const res = await fetch(DATA);
   if (!res.ok) throw new Error(`Couldn't download the database (${res.status}). Run \`make playground\` to build it.`);
   const total = Number(res.headers.get("content-length")) || 0;
-  const reader = res.body.getReader();
-  const chunks = [];
+  // Count compressed bytes for the progress bar, and unpack while downloading.
   let got = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    got += value.length;
-    postMessage({ type: "progress", got, total });
-  }
+  const counted = res.body.pipeThrough(new TransformStream({
+    transform(chunk, ctl) {
+      got += chunk.length;
+      postMessage({ type: "progress", got, total });
+      ctl.enqueue(chunk);
+    },
+  }));
+  bundle = await new Response(new xzDecompress.XzReadableStream(counted)).blob();
   postMessage({ type: "progress", got, total, unpacking: true });
-  bundle = new Blob(chunks);
-  db = await PGlite.create({ loadDataDir: bundle });
+  runtime = await runtimeReady;
+  db = await open();
   const v = await db.query("SELECT version() AS v");
   postMessage({ type: "ready", version: v.rows[0].v.split(" on ")[0] });
 }
@@ -35,7 +52,7 @@ async function run(sql) {
   } catch (e) {
     if (e.escaped) {
       await db.close().catch(() => {});
-      db = await PGlite.create({ loadDataDir: bundle });
+      db = await open();
       postMessage({ type: "reloaded" });
     }
     throw e;

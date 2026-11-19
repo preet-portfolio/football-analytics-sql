@@ -51,7 +51,7 @@ function call(type, sql) {
 
 function showProgress({ got, total, unpacking }) {
   const mb = (n) => (n / 1e6).toFixed(0);
-  $("engine").textContent = unpacking ? "Unpacking the database…" : `Downloading the database: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
+  $("engine").textContent = unpacking ? "Starting PostgreSQL…" : `Downloading the database: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
   $("bar").firstElementChild.style.width = total ? `${Math.min(100, (100 * got) / total)}%` : "30%";
 }
 
