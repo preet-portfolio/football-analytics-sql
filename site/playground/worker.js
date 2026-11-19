@@ -87,19 +87,64 @@ async function save(key, blob) {
 // The build's timestamp is in the URL, so a stale HTTP-cached file from an
 // older build can't be saved under the new build's key.
 async function download(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Couldn't download the database (${res.status}). Run \`make playground\` to build it.`);
-  const total = Number(res.headers.get("content-length")) || 0;
-  // Count compressed bytes for the progress bar, and unpack while downloading.
-  let got = 0;
-  const counted = res.body.pipeThrough(new TransformStream({
-    transform(chunk, ctl) {
-      got += chunk.length;
-      postMessage({ type: "progress", got, total });
-      ctl.enqueue(chunk);
-    },
-  }));
-  return new Response(new xzDecompress.XzReadableStream(counted)).blob();
+  let note = null; // shown with the progress after a failed attempt
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await downloadOnce(url, note);
+    } catch (e) {
+      if (!e.retry) throw e;
+      if (attempt === ATTEMPTS) throw new Error(`The database download ${e.message} ${ATTEMPTS} times. Check your connection and reload the page.`);
+      note = `the last attempt ${e.message}; attempt ${attempt + 1} of ${ATTEMPTS}`;
+      postMessage({ type: "progress", got: 0, total: 0, note });
+    }
+  }
+}
+
+// Downloads from GitHub Pages occasionally stop sending bytes without failing,
+// which would leave the page at "Downloading…" forever. If nothing arrives for
+// STALL_MS (including before the response starts), give up on this attempt and
+// start again, bypassing the HTTP cache in case it holds the broken response.
+const STALL_MS = 15000;
+const ATTEMPTS = 3;
+
+async function downloadOnce(url, note) {
+  const abort = new AbortController();
+  let stalled = false, timer;
+  const watch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { stalled = true; abort.abort(); }, STALL_MS);
+  };
+  const retryable = (message) => Object.assign(new Error(message), { retry: true });
+  watch();
+  try {
+    let res;
+    try {
+      res = await fetch(url, { signal: abort.signal, cache: note ? "no-store" : "default" });
+    } catch (e) {
+      throw retryable(stalled ? "stalled" : "failed");
+    }
+    if (res.status >= 500) throw retryable(`failed (${res.status})`);
+    if (!res.ok) throw new Error(`Couldn't download the database (${res.status}). Run \`make playground\` to build it.`);
+    const total = Number(res.headers.get("content-length")) || 0;
+    // Count compressed bytes for the progress bar, and unpack while downloading.
+    let got = 0;
+    const counted = res.body.pipeThrough(new TransformStream({
+      transform(chunk, ctl) {
+        watch();
+        got += chunk.length;
+        postMessage({ type: "progress", got, total, note });
+        ctl.enqueue(chunk);
+      },
+    }));
+    try {
+      return await new Response(new xzDecompress.XzReadableStream(counted)).blob();
+    } catch (e) {
+      if (stalled || e instanceof TypeError) throw retryable(stalled ? "stalled" : "failed");
+      throw e; // a corrupt file: retrying won't help
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // See runner.js for how learner scripts are isolated. If a script escaped its

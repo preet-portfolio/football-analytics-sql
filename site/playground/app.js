@@ -49,9 +49,9 @@ function call(type, sql) {
   return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); worker.postMessage({ id, type, sql }); });
 }
 
-function showProgress({ got, total, status }) {
+function showProgress({ got, total, status, note }) {
   const mb = (n) => (n / 1e6).toFixed(0);
-  $("engine").textContent = status ?? `Downloading the database: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
+  $("engine").textContent = status ?? `Downloading the database${note ? ` (${note})` : ""}: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
   $("bar").firstElementChild.style.width = status ? "100%" : total ? `${Math.min(100, (100 * got) / total)}%` : "30%";
 }
 
