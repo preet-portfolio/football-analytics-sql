@@ -31,7 +31,7 @@ function startWorker() {
   worker = new Worker("worker.js", { type: "module" });
   worker.onmessage = ({ data }) => {
     if (data.type === "progress") return showProgress(data);
-    if (data.type === "ready") { ready = true; $("engine").textContent = `${data.version}, running in this tab via PGlite.`; $("bar").hidden = true; setButtons(); loadTables(); return; }
+    if (data.type === "ready") { ready = true; $("engine").textContent = `${data.version}, running in this tab via PGlite${data.saved ? " (from the copy saved in this browser)" : ""}.`; $("bar").hidden = true; setButtons(); loadTables(); return; }
     if (data.type === "reloaded") { referenceCache.clear(); return; }
     if (data.type === "load-error") { $("engine").textContent = data.error; return; }
     const p = pending.get(data.id);

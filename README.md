@@ -95,7 +95,8 @@ RANK → running totals → LATERAL → jsonb data quality). Each challenge is c
 automatically against a reference answer. Progress stays in your browser.
 
 `make playground` copies the tested model into PGlite and saves its data directory as
-one 15 MB xz download (34 MB as gzip), which the page unpacks while it downloads. `make playground-test` (`node --test`) then proves three things:
+one 15 MB xz download (34 MB as gzip), which the page unpacks while it downloads and then keeps in
+the browser's Cache Storage, so repeat visits start in under half a second until the next build. `make playground-test` (`node --test`) then proves three things:
 
 - **Parity.** The browser database has the same 48 tables and views as the tested database, with exactly the same
   rows as the pgTAP-tested Postgres 16 (row count plus a hash of every row). This

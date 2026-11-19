@@ -4,7 +4,8 @@ import { PGlite } from "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14
 import xzDecompress from "https://cdn.jsdelivr.net/npm/xz-decompress@0.2.3/+esm"; // CommonJS: only a default export
 import { runLearnerSql } from "./runner.js";
 
-const DATA = new URL("./data/worldcup2022.tar.xz", self.location.href);
+const DATA_DIR = new URL("./data/", self.location.href);
+const SAVED = "wc22-database"; // Cache Storage bucket holding the unpacked tarball
 const PGLITE = "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14/dist/";
 let db, bundle, runtime;
 
@@ -22,9 +23,56 @@ function prefetchRuntime() {
 
 const open = () => PGlite.create({ ...runtime, loadDataDir: bundle });
 
+// Repeat visits skip the download and the xz unpacking (most of the start-up
+// time): the unpacked tarball is kept in Cache Storage, keyed by the build's
+// timestamp from manifest.json, so a new build replaces it. The saved copy is
+// never written to (PGlite works on its own in-memory copy), so Reset and the
+// reload after an escape start from it too.
 async function load() {
   const runtimeReady = prefetchRuntime();
-  const res = await fetch(DATA);
+  const build = await fetch(new URL("manifest.json", DATA_DIR), { cache: "no-cache" })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  const key = build && new URL(`${build.file}?built=${encodeURIComponent(build.built_at)}`, DATA_DIR);
+  bundle = await savedCopy(key);
+  const fromSaved = Boolean(bundle);
+  if (!bundle) {
+    if (!key) throw new Error("Couldn't reach the site to download the database. Check your connection and reload.");
+    bundle = await download(key);
+  }
+  postMessage({ type: "progress", unpacking: true });
+  runtime = await runtimeReady;
+  db = await open();
+  const v = await db.query("SELECT version() AS v");
+  postMessage({ type: "ready", version: v.rows[0].v.split(" on ")[0], saved: fromSaved });
+  if (!fromSaved) save(key, bundle);
+}
+
+// The saved copy for this build; offline (no manifest), any saved copy.
+async function savedCopy(key) {
+  try {
+    const cache = await caches.open(SAVED);
+    const hit = key ? await cache.match(key) : (await cache.matchAll())[0];
+    return hit ? await hit.blob() : null;
+  } catch {
+    return null; // storage blocked (private mode, quota): download as usual
+  }
+}
+
+async function save(key, blob) {
+  try {
+    const cache = await caches.open(SAVED);
+    for (const old of await cache.keys()) if (old.url !== key.href) await cache.delete(old);
+    await cache.put(key, new Response(blob, { headers: { "content-type": "application/x-tar" } }));
+  } catch {
+    // Not saved; the next visit downloads again.
+  }
+}
+
+// The build's timestamp is in the URL, so a stale HTTP-cached file from an
+// older build can't be saved under the new build's key.
+async function download(url) {
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Couldn't download the database (${res.status}). Run \`make playground\` to build it.`);
   const total = Number(res.headers.get("content-length")) || 0;
   // Count compressed bytes for the progress bar, and unpack while downloading.
@@ -36,12 +84,7 @@ async function load() {
       ctl.enqueue(chunk);
     },
   }));
-  bundle = await new Response(new xzDecompress.XzReadableStream(counted)).blob();
-  postMessage({ type: "progress", got, total, unpacking: true });
-  runtime = await runtimeReady;
-  db = await open();
-  const v = await db.query("SELECT version() AS v");
-  postMessage({ type: "ready", version: v.rows[0].v.split(" on ")[0] });
+  return new Response(new xzDecompress.XzReadableStream(counted)).blob();
 }
 
 // See runner.js for how learner scripts are isolated. If a script escaped its
