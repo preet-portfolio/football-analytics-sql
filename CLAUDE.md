@@ -46,7 +46,10 @@ No host `psql`; always go through `docker compose exec db ...`.
    question. Catalogue and findings: `docs/analysis.md`.
 6. **playground** (`playground/` builds, `site/playground/` serves) — PGlite (Postgres 18
    in WASM) in a Web Worker; `check.js` is shared by page and tests; `challenges.js`
-   holds each challenge's `solution` and `wrong` variants.
+   holds each challenge's `solution` and `wrong` variants. The bundle ships index files
+   empty and trims the kept WAL segment; anything that opens it must run
+   `rebuildIndexes()` (`indexes.js`) first. The worker caches the indexed copy in Cache
+   Storage keyed by `manifest.json`'s `built_at`.
 
 Pinned sources live in `config/sources.env`. Changing a commit changes the data.
 

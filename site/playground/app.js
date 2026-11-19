@@ -49,10 +49,10 @@ function call(type, sql) {
   return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); worker.postMessage({ id, type, sql }); });
 }
 
-function showProgress({ got, total, unpacking }) {
+function showProgress({ got, total, status }) {
   const mb = (n) => (n / 1e6).toFixed(0);
-  $("engine").textContent = unpacking ? "Starting PostgreSQL…" : `Downloading the database: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
-  $("bar").firstElementChild.style.width = total ? `${Math.min(100, (100 * got) / total)}%` : "30%";
+  $("engine").textContent = status ?? `Downloading the database: ${mb(got)}${total ? ` of ${mb(total)}` : ""} MB`;
+  $("bar").firstElementChild.style.width = status ? "100%" : total ? `${Math.min(100, (100 * got) / total)}%` : "30%";
 }
 
 // Kill a runaway query: terminate the worker and start a fresh one (served from cache).

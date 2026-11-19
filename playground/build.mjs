@@ -8,6 +8,7 @@
 // the same tarball is 15 MB as xz -9 and 34 MB as gzip. The browser unpacks it
 // with xz-decompress (WebAssembly) while it downloads. Needs the `xz` command.
 import { PGlite } from "@electric-sql/pglite";
+import { REBUILT_SCHEMAS } from "../site/playground/indexes.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, statSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -94,12 +95,35 @@ step("vacuumed");
 await db.exec("CHECKPOINT;");
 const keepWal = (await db.query("SELECT pg_walfile_name(pg_current_wal_lsn()) AS f")).rows[0].f;
 
+// Indexes are about half of the compressed download (mostly B-trees of random
+// UUIDs, which don't compress), and the browser rebuilds them all from the tables
+// in about a second. So ship every index file in these schemas empty, with the
+// catalogue (primary keys, foreign keys, unique constraints) untouched; the page
+// runs rebuildIndexes() (site/playground/indexes.js) before any query.
+const emptied = new Set((await db.query(`
+  SELECT pg_relation_filepath(c.oid) AS path FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relkind = 'i' AND n.nspname = ANY($1)`, [REBUILT_SCHEMAS])).rows.map((r) => r.path));
+
 mkdirSync(dirname(OUT), { recursive: true });
 step("checkpointed");
 const dump = await db.dumpDataDir("none");
 step("dumped");
-const tar = withoutStaleWal(Buffer.from(await dump.arrayBuffer()), keepWal);
-step("stale WAL dropped");
+// Recovery in the browser starts at the checkpoint's redo point and stops at the
+// end of the log, after reading the segment's first page to check its header.
+// The rest of the kept segment is leftover bytes from a recycled file, which
+// compress badly, so they are zeroed (zeros read as "end of log").
+const wal = (await db.query(`
+  SELECT redo_lsn::text AS redo, pg_walfile_name(redo_lsn) AS redo_file,
+         pg_current_wal_insert_lsn()::text AS "end", pg_walfile_name(pg_current_wal_insert_lsn()) AS end_file,
+         (SELECT setting::bigint FROM pg_settings WHERE name = 'wal_segment_size') AS seg, current_setting('wal_block_size')::int AS page
+  FROM pg_control_checkpoint()`)).rows[0];
+if (wal.redo_file !== keepWal || wal.end_file !== keepWal) throw new Error(`WAL moved on after the checkpoint: ${JSON.stringify(wal)}`);
+const lsn = (t) => { const [hi, lo] = t.split("/"); return (BigInt("0x" + hi) << 32n) | BigInt("0x" + lo); };
+const inSegment = (t) => Number(lsn(t) % BigInt(wal.seg));
+const walKeep = { from: Math.floor(inSegment(wal.redo) / wal.page) * wal.page, to: Math.ceil(inSegment(wal.end) / wal.page) * wal.page, page: wal.page };
+const tar = slimTar(Buffer.from(await dump.arrayBuffer()), keepWal, emptied, walKeep);
+step("stale WAL dropped, indexes emptied");
 // -9 without -e: -9e saves under 0.1 MB and takes half as long again.
 const xz = spawnSync("xz", ["-9", "-T1", "-c"], { input: tar, maxBuffer: 1 << 30 });
 if (xz.error || xz.status !== 0) throw new Error(`xz failed: ${xz.error?.message ?? xz.stderr}. Install xz (brew install xz / apt install xz-utils).`);
@@ -109,16 +133,18 @@ step("compressed");
 const version = (await db.query("SELECT version() AS v")).rows[0].v.split(" on ")[0];
 await db.close();
 writeFileSync(join(dirname(OUT), "manifest.json"), JSON.stringify({
-  file: "worldcup2022.tar.xz", bytes: statSync(OUT).size, unpacked_bytes: tar.length, postgres: version,
+  file: "worldcup2022.tar.xz", bytes: statSync(OUT).size, unpacked_bytes: tar.length, empty_indexes: emptied.size, postgres: version,
   pglite: JSON.parse(readFileSync(join(ROOT, "playground/node_modules/@electric-sql/pglite/package.json"), "utf8")).version,
   tables: tables.length, built_at: new Date().toISOString(),
 }, null, 2));
 console.log(`playground: wrote ${OUT.replace(ROOT + "/", "")} (${(statSync(OUT).size / 1e6).toFixed(1)} MB) in ${((Date.now() - started) / 1000).toFixed(0)}s`);
 
-// Copy a ustar archive, skipping pg_wal segment files other than `keep`.
-function withoutStaleWal(tar, keep) {
+// Copy a ustar archive, skipping pg_wal segment files other than `keep` (and
+// zeroing that one outside its first page and walKeep.from..to), and writing the
+// files in `empty` (paths relative to the data directory) as 0 bytes.
+function slimTar(tar, keep, empty, walKeep) {
   const out = [];
-  let dropped = 0;
+  let dropped = 0, emptied = 0;
   for (let off = 0; off + 512 <= tar.length; ) {
     const header = tar.subarray(off, off + 512);
     if (header.every((b) => b === 0)) { out.push(tar.subarray(off)); break; }
@@ -126,10 +152,31 @@ function withoutStaleWal(tar, keep) {
     const size = parseInt(header.subarray(124, 136).toString("utf8").replace(/\0.*$/s, "").trim() || "0", 8);
     const end = off + 512 + Math.ceil(size / 512) * 512;
     const seg = name.match(/pg_wal\/([0-9A-F]{24})$/);
+    const rel = name.match(/(base\/\d+\/\d+)$/);
     if (seg && seg[1] !== keep) dropped++;
+    else if (seg) {
+      const body = Buffer.alloc(size);
+      const src = tar.subarray(off + 512, off + 512 + size);
+      src.copy(body, 0, 0, walKeep.page);
+      src.copy(body, walKeep.from, walKeep.from, walKeep.to);
+      out.push(header, body, Buffer.alloc(end - off - 512 - size));
+      console.log(`  kept WAL bytes ${walKeep.from}..${walKeep.to} of ${size}`);
+    } else if (rel && empty.has(rel[1])) { out.push(withSize(header, 0)); emptied++; }
     else out.push(tar.subarray(off, end));
     off = end;
   }
-  console.log(`  dropped ${dropped} stale WAL segments, kept ${keep}`);
+  if (emptied !== empty.size) throw new Error(`emptied ${emptied} of ${empty.size} index files; tar layout changed?`);
+  console.log(`  dropped ${dropped} stale WAL segments (kept ${keep}), emptied ${emptied} index files`);
   return Buffer.concat(out);
+}
+
+// A copy of a ustar header with a new size field and checksum.
+function withSize(header, size) {
+  const h = Buffer.from(header);
+  h.write(size.toString(8).padStart(11, "0") + "\0", 124, 12, "ascii");
+  h.fill(0x20, 148, 156);
+  let sum = 0;
+  for (const b of h) sum += b;
+  h.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "ascii");
+  return h;
 }

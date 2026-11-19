@@ -3,11 +3,13 @@
 import { PGlite } from "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14/dist/index.js";
 import xzDecompress from "https://cdn.jsdelivr.net/npm/xz-decompress@0.2.3/+esm"; // CommonJS: only a default export
 import { runLearnerSql } from "./runner.js";
+import { rebuildIndexes } from "./indexes.js";
 
 const DATA_DIR = new URL("./data/", self.location.href);
 const SAVED = "wc22-database"; // Cache Storage bucket holding the unpacked tarball
 const PGLITE = "https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.14/dist/";
 let db, bundle, runtime;
+let indexed = false; // does `bundle` already have its indexes? (the download doesn't)
 
 // PGlite would only fetch its engine (pglite.wasm) and base files (pglite.data)
 // once the database had finished downloading. Fetch and compile them alongside
@@ -21,13 +23,21 @@ function prefetchRuntime() {
     .catch(() => ({}));
 }
 
-const open = () => PGlite.create({ ...runtime, loadDataDir: bundle });
+async function open() {
+  const fresh = await PGlite.create({ ...runtime, loadDataDir: bundle });
+  if (!indexed) {
+    postMessage({ type: "progress", status: "Building indexes…" });
+    await rebuildIndexes(fresh);
+  }
+  return fresh;
+}
 
-// Repeat visits skip the download and the xz unpacking (most of the start-up
-// time): the unpacked tarball is kept in Cache Storage, keyed by the build's
-// timestamp from manifest.json, so a new build replaces it. The saved copy is
-// never written to (PGlite works on its own in-memory copy), so Reset and the
-// reload after an escape start from it too.
+// Repeat visits skip the download, the xz unpacking and the index rebuild: once
+// the indexes are built, the data directory is saved in Cache Storage, keyed by
+// the build's timestamp from manifest.json, so a new build replaces it. It is
+// saved before the first learner query can run, and never written to afterwards
+// (PGlite works on its own in-memory copy), so Reset and the reload after an
+// escape start from it too.
 async function load() {
   const runtimeReady = prefetchRuntime();
   const build = await fetch(new URL("manifest.json", DATA_DIR), { cache: "no-cache" })
@@ -35,17 +45,22 @@ async function load() {
     .catch(() => null);
   const key = build && new URL(`${build.file}?built=${encodeURIComponent(build.built_at)}`, DATA_DIR);
   bundle = await savedCopy(key);
-  const fromSaved = Boolean(bundle);
+  const fromSaved = indexed = Boolean(bundle);
   if (!bundle) {
     if (!key) throw new Error("Couldn't reach the site to download the database. Check your connection and reload.");
     bundle = await download(key);
   }
-  postMessage({ type: "progress", unpacking: true });
+  postMessage({ type: "progress", status: "Starting PostgreSQL…" });
   runtime = await runtimeReady;
   db = await open();
+  if (!fromSaved) {
+    await db.exec("CHECKPOINT;");
+    bundle = await db.dumpDataDir("none");
+    indexed = true;
+    save(key, bundle); // in the background
+  }
   const v = await db.query("SELECT version() AS v");
   postMessage({ type: "ready", version: v.rows[0].v.split(" on ")[0], saved: fromSaved });
-  if (!fromSaved) save(key, bundle);
 }
 
 // The saved copy for this build; offline (no manifest), any saved copy.
@@ -63,7 +78,7 @@ async function save(key, blob) {
   try {
     const cache = await caches.open(SAVED);
     for (const old of await cache.keys()) if (old.url !== key.href) await cache.delete(old);
-    await cache.put(key, new Response(blob, { headers: { "content-type": "application/x-tar" } }));
+    await cache.put(key, new Response(blob, { headers: { "content-type": blob.type || "application/x-tar" } }));
   } catch {
     // Not saved; the next visit downloads again.
   }

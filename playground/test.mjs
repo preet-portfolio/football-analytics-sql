@@ -17,6 +17,7 @@ import xzDecompress from "xz-decompress"; // the same decoder (and version) the 
 import { challenges } from "../site/playground/challenges.js";
 import { checkResult } from "../site/playground/check.js";
 import { runLearnerSql } from "../site/playground/runner.js";
+import { rebuildIndexes } from "../site/playground/indexes.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE = join(ROOT, "site/playground/data/worldcup2022.tar.xz");
@@ -28,6 +29,7 @@ const runAsLearner = (sql) => runLearnerSql(db, sql);
 before(async () => {
   const tar = await new Response(new xzDecompress.XzReadableStream(new Blob([readFileSync(BUNDLE)]).stream())).blob();
   db = await PGlite.create({ loadDataDir: tar });
+  await rebuildIndexes(db); // the bundle ships indexes empty, as the page does
 });
 after(() => db?.close());
 
@@ -57,6 +59,21 @@ test("parity: browser database matches the tested Postgres, relation by relation
       assert.equal(browser, psql(fingerprintSql(rel)));
     });
   }
+});
+
+test("indexes: shipped empty, rebuilt in the browser, and used", async () => {
+  const { rows } = await db.query(`
+    SELECT n.nspname || '.' || c.relname AS idx, pg_relation_size(c.oid)::int AS bytes
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind = 'i' AND n.nspname IN ('model', 'analysis', 'stg')`);
+  assert.ok(rows.length > 30, `only ${rows.length} indexes`);
+  assert.deepEqual(rows.filter((r) => r.bytes === 0).map((r) => r.idx), [], "indexes left empty");
+  const plan = await db.query(`EXPLAIN SELECT * FROM model.event
+    WHERE event_id = (SELECT event_id FROM model.pass ORDER BY event_id LIMIT 1)`);
+  assert.match(plan.rows.map((r) => r["QUERY PLAN"]).join("\n"), /Index Scan using event_pkey/);
+  const found = await db.query(`SELECT count(*)::int AS n FROM model.event e JOIN model.pass p USING (event_id)
+    WHERE e.event_id IN (SELECT event_id FROM model.pass ORDER BY event_id LIMIT 50)`);
+  assert.equal(found.rows[0].n, 50);
 });
 
 test("isolation: no learner script changes what the next query sees", async () => {

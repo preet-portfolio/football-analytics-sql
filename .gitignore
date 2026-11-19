@@ -11,6 +11,6 @@ site/data/playground.tap
 .DS_Store
 .env
 
-# Built by `make playground` (15 MB; rebuilt in CI)
+# Built by `make playground` (11 MB; rebuilt in CI)
 site/playground/data/
 playground/node_modules/
